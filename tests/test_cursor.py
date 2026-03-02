@@ -307,3 +307,44 @@ class TestRowcount:
         cur.execute("DELETE FROM t WHERE x > 0")
         assert cur.rowcount == 5
         cur.close()
+
+
+# ---------------------------------------------------------------------------
+# Cursor reset between executes (Warning #6)
+# ---------------------------------------------------------------------------
+class TestCursorReset:
+    def test_second_execute_calls_close_cursor(self, monkeypatch):
+        _patch_cursor_alloc(monkeypatch)
+        import api
+
+        close_cursor_called = [0]
+
+        def fake_close_cursor(h):
+            close_cursor_called[0] += 1
+            return C.SQL_SUCCESS
+
+        monkeypatch.setattr(api, "SQLCloseCursor", fake_close_cursor)
+        monkeypatch.setattr(api, "SQLExecDirectW", lambda *a: C.SQL_SUCCESS)
+
+        def num_cols(h, ptr):
+            ptr._obj.value = 1
+            return C.SQL_SUCCESS
+        monkeypatch.setattr(api, "SQLNumResultCols", num_cols)
+
+        def fake_describe(h, col_num, name_buf, buf_len, name_len, type_ptr, size_ptr, dec_ptr, null_ptr):
+            name_buf[0] = "x"
+            name_len._obj.value = 1
+            type_ptr._obj.value = C.SQL_INTEGER
+            size_ptr._obj.value = 4
+            dec_ptr._obj.value = 0
+            null_ptr._obj.value = 0
+            return C.SQL_SUCCESS
+        monkeypatch.setattr(api, "SQLDescribeColW", fake_describe)
+
+        cur = Cursor(_make_fake_conn())
+        cur.execute("SELECT x FROM t")
+        assert close_cursor_called[0] == 0  # first execute, no reset needed
+
+        cur.execute("SELECT x FROM t")  # second execute triggers reset
+        assert close_cursor_called[0] == 1
+        cur.close()

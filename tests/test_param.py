@@ -5,7 +5,7 @@ and extract_parameters MAX-type / Informix normalization.
 """
 
 import ctypes
-from datetime import datetime
+from datetime import date, datetime, time as dt_time
 from unittest.mock import patch
 
 import pytest
@@ -122,6 +122,32 @@ class TestBindValue:
         pos = args[0]
         assert pos[3].value == C.SQL_C_SBIGINT
 
+    def test_int_boundary_int32_max(self):
+        """INT32_MAX (2147483647) should use SQL_C_LONG."""
+        args = self._bind(0x7FFFFFFF)
+        pos = args[0]
+        assert pos[3].value == C.SQL_C_LONG
+        assert pos[4].value == C.SQL_INTEGER
+
+    def test_int_boundary_int32_min(self):
+        """INT32_MIN (-2147483648) should use SQL_C_LONG."""
+        args = self._bind(-0x80000000)
+        pos = args[0]
+        assert pos[3].value == C.SQL_C_LONG
+        assert pos[4].value == C.SQL_INTEGER
+
+    def test_int_boundary_int32_max_plus_one(self):
+        """INT32_MAX+1 should use SQL_C_SBIGINT."""
+        args = self._bind(0x80000000)
+        pos = args[0]
+        assert pos[3].value == C.SQL_C_SBIGINT
+
+    def test_int_boundary_int32_min_minus_one(self):
+        """INT32_MIN-1 should use SQL_C_SBIGINT."""
+        args = self._bind(-0x80000001)
+        pos = args[0]
+        assert pos[3].value == C.SQL_C_SBIGINT
+
     # -- int with described Informix BIGINT --
     def test_int_small_but_described_bigint(self):
         """Small int that's described as BIGINT stays BIGINT (mirrors Go param.go)."""
@@ -163,6 +189,22 @@ class TestBindValue:
         pos = args[0]
         assert pos[3].value == C.SQL_C_TYPE_TIMESTAMP
         assert pos[6].value == 5  # decimal
+
+    # -- date --
+    def test_date(self):
+        d = date(2026, 3, 2)
+        args = self._bind(d)
+        pos = args[0]
+        assert pos[3].value == C.SQL_C_TYPE_DATE
+        assert pos[4].value == C.SQL_TYPE_DATE
+
+    # -- time --
+    def test_time(self):
+        t = dt_time(14, 30, 59)
+        args = self._bind(t)
+        pos = args[0]
+        assert pos[3].value == C.SQL_C_TYPE_TIME
+        assert pos[4].value == C.SQL_TYPE_TIME
 
     # -- bytes --
     def test_bytes_small(self):
@@ -298,3 +340,29 @@ class TestExtractParameters:
             params = extract_parameters(ctypes.c_void_p(1))
             assert params[0].sql_type == C.SQL_BIT
             assert params[0].size == 1
+
+    def test_num_params_failure_raises(self):
+        """SQLNumParams failure raises ODBCError."""
+        with patch("param.api.SQLNumParams") as mock_num:
+            mock_num.return_value = C.SQL_ERROR
+            with patch("param.new_error") as mock_err:
+                mock_err.side_effect = ODBCError("SQLNumParams", [])
+                with pytest.raises(ODBCError):
+                    extract_parameters(ctypes.c_void_p(1))
+
+    def test_describe_param_failure_fallback(self):
+        """When SQLDescribeParam fails, param remains undescribed."""
+        with (
+            patch("param.api.SQLNumParams") as mock_num,
+            patch("param.api.SQLDescribeParam") as mock_desc,
+        ):
+            def num_side(h, ptr):
+                ptr._obj.value = 1
+                return C.SQL_SUCCESS
+
+            mock_num.side_effect = num_side
+            mock_desc.return_value = C.SQL_ERROR
+            params = extract_parameters(ctypes.c_void_p(1))
+            assert len(params) == 1
+            assert params[0].is_described is False
+            assert params[0].sql_type == C.SQL_UNKNOWN_TYPE

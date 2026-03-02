@@ -235,6 +235,31 @@ class TestExtractUnsupportedCType:
             _extract_fixed_value(9999, 0, b"\x00")
 
 
+class TestExtractEmptyBuffer:
+    """Blocker #2 fix: empty buffer raises ODBCError, not struct.error."""
+
+    def test_empty_buffer_raises(self):
+        with pytest.raises(ODBCError, match="_extract_fixed_value"):
+            _extract_fixed_value(C.SQL_C_LONG, C.SQL_INTEGER, b"")
+
+    def test_short_buffer_raises(self):
+        """Buffer too short for the requested struct unpack."""
+        with pytest.raises(ODBCError):
+            _extract_fixed_value(C.SQL_C_LONG, C.SQL_INTEGER, b"\x01")
+
+    def test_short_buffer_bigint_raises(self):
+        with pytest.raises(ODBCError):
+            _extract_fixed_value(C.SQL_C_SBIGINT, C.SQL_BIGINT, b"\x01\x02")
+
+    def test_short_buffer_double_raises(self):
+        with pytest.raises(ODBCError):
+            _extract_fixed_value(C.SQL_C_DOUBLE, C.SQL_DOUBLE, b"\x01")
+
+    def test_short_buffer_timestamp_raises(self):
+        with pytest.raises(ODBCError):
+            _extract_fixed_value(C.SQL_C_TYPE_TIMESTAMP, C.SQL_TYPE_TIMESTAMP, b"\x01")
+
+
 # ====================================================================
 # new_column factory — type switch (needs mocked SQLDescribeColW)
 # ====================================================================

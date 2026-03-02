@@ -89,6 +89,28 @@ class TestTransaction:
         args = mock_end.call_args[0]
         assert args[2].value == C.SQL_ROLLBACK
 
+
+class TestTransactionEndTranFailure:
+    """SQLEndTran failure raises ODBCError."""
+
+    @patch("transaction.api.SQLSetConnectAttrW", return_value=C.SQL_SUCCESS)
+    @patch("transaction.api.SQLEndTran", return_value=C.SQL_ERROR)
+    @patch("transaction.api.SQLGetDiagRecW", return_value=C.SQL_NO_DATA)
+    def test_commit_failure_raises(self, mock_diag, mock_end, mock_set):
+        conn = _make_fake_conn()
+        tx = Transaction(conn)
+        with pytest.raises(ODBCError):
+            tx.commit()
+
+    @patch("transaction.api.SQLSetConnectAttrW", return_value=C.SQL_SUCCESS)
+    @patch("transaction.api.SQLEndTran", return_value=C.SQL_ERROR)
+    @patch("transaction.api.SQLGetDiagRecW", return_value=C.SQL_NO_DATA)
+    def test_rollback_failure_raises(self, mock_diag, mock_end, mock_set):
+        conn = _make_fake_conn()
+        tx = Transaction(conn)
+        with pytest.raises(ODBCError):
+            tx.rollback()
+
     @patch("transaction.api.SQLSetConnectAttrW", return_value=C.SQL_SUCCESS)
     @patch("transaction.api.SQLEndTran", return_value=C.SQL_SUCCESS)
     def test_double_commit_is_noop(self, mock_end, mock_set):

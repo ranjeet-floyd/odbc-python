@@ -69,7 +69,7 @@ def _get_column_type_name(h_stmt: ctypes.c_void_p, idx: int) -> str:
         api.SQLUSMALLINT(idx + 1),
         api.SQLUSMALLINT(api.SQL_DESC_TYPE_NAME),
         ctypes.cast(buf, api.SQLPOINTER),
-        api.SQLSMALLINT(256),
+        api.SQLSMALLINT(ctypes.sizeof(buf)),
         ctypes.byref(str_len),
         None,
     )
@@ -106,58 +106,68 @@ def _extract_fixed_value(
     sql_type: int,
     buf: bytes,
 ) -> Any:
-    """Interpret a fixed-size buffer based on c_type."""
-    if c_type == api.SQL_C_BIT:
-        return bool(buf[0])
+    """Interpret a fixed-size buffer based on c_type.
 
-    if c_type == api.SQL_C_LONG:
-        return struct.unpack_from("<i", buf)[0]
+    Raises ODBCError if the buffer is too short for the requested type.
+    """
+    if not buf:
+        raise ODBCError("_extract_fixed_value", []) from ValueError("empty buffer")
 
-    if c_type == api.SQL_C_SBIGINT:
-        return struct.unpack_from("<q", buf)[0]
+    try:
+        if c_type == api.SQL_C_BIT:
+            return bool(buf[0])
 
-    if c_type == api.SQL_C_DOUBLE:
-        return struct.unpack_from("<d", buf)[0]
+        if c_type == api.SQL_C_LONG:
+            return struct.unpack_from("<i", buf)[0]
 
-    if c_type == api.SQL_C_FLOAT:
-        return struct.unpack_from("<f", buf)[0]
+        if c_type == api.SQL_C_SBIGINT:
+            return struct.unpack_from("<q", buf)[0]
 
-    if c_type == api.SQL_C_TYPE_TIMESTAMP:
-        ts = api.SQL_TIMESTAMP_STRUCT.from_buffer_copy(buf)
-        return datetime(
-            ts.year, ts.month, ts.day,
-            ts.hour, ts.minute, ts.second,
-            ts.fraction // 1000,  # nanoseconds -> microseconds
-        )
+        if c_type == api.SQL_C_DOUBLE:
+            return struct.unpack_from("<d", buf)[0]
 
-    if c_type == api.SQL_C_TYPE_DATE:
-        ds = api.SQL_DATE_STRUCT.from_buffer_copy(buf)
-        return date(ds.year, ds.month, ds.day)
+        if c_type == api.SQL_C_FLOAT:
+            return struct.unpack_from("<f", buf)[0]
 
-    if c_type == api.SQL_C_TYPE_TIME:
-        ts = api.SQL_TIME_STRUCT.from_buffer_copy(buf)
-        return time(ts.hour, ts.minute, ts.second)
+        if c_type == api.SQL_C_TYPE_TIMESTAMP:
+            ts = api.SQL_TIMESTAMP_STRUCT.from_buffer_copy(buf)
+            return datetime(
+                ts.year, ts.month, ts.day,
+                ts.hour, ts.minute, ts.second,
+                ts.fraction // 1000,  # nanoseconds -> microseconds
+            )
 
-    if c_type == api.SQL_C_GUID:
-        g = api.SQLGUID.from_buffer_copy(buf)
-        p1 = "".join(f"{b:02x}" for b in g.Data4[:2])
-        p2 = "".join(f"{b:02x}" for b in g.Data4[2:])
-        return f"{g.Data1:08x}-{g.Data2:04x}-{g.Data3:04x}-{p1}-{p2}"
+        if c_type == api.SQL_C_TYPE_DATE:
+            ds = api.SQL_DATE_STRUCT.from_buffer_copy(buf)
+            return date(ds.year, ds.month, ds.day)
 
-    if c_type == api.SQL_C_BINARY:
-        if sql_type == api.SQL_SS_TIME2:
-            t2 = api.SQL_SS_TIME2_STRUCT.from_buffer_copy(buf)
-            return time(t2.hour, t2.minute, t2.second, t2.fraction // 1000)
-        return bytes(buf)
+        if c_type == api.SQL_C_TYPE_TIME:
+            ts = api.SQL_TIME_STRUCT.from_buffer_copy(buf)
+            return time(ts.hour, ts.minute, ts.second)
 
-    if c_type == api.SQL_C_WCHAR:
-        # Interpret as UTF-16LE null-terminated string.
-        return buf.decode("utf-16-le").rstrip("\x00")
+        if c_type == api.SQL_C_GUID:
+            g = api.SQLGUID.from_buffer_copy(buf)
+            p1 = "".join(f"{b:02x}" for b in g.Data4[:2])
+            p2 = "".join(f"{b:02x}" for b in g.Data4[2:])
+            return f"{g.Data1:08x}-{g.Data2:04x}-{g.Data3:04x}-{p1}-{p2}"
 
-    if c_type == api.SQL_C_CHAR:
-        return bytes(buf)
+        if c_type == api.SQL_C_BINARY:
+            if sql_type == api.SQL_SS_TIME2:
+                t2 = api.SQL_SS_TIME2_STRUCT.from_buffer_copy(buf)
+                return time(t2.hour, t2.minute, t2.second, t2.fraction // 1000)
+            return bytes(buf)
 
-    raise ODBCError("unsupported_ctype", [])
+        if c_type == api.SQL_C_WCHAR:
+            # Interpret as UTF-16LE null-terminated string.
+            return buf.decode("utf-16-le").rstrip("\x00")
+
+        if c_type == api.SQL_C_CHAR:
+            return bytes(buf)
+
+        raise ODBCError("unsupported_ctype", [])
+
+    except (struct.error, ValueError) as exc:
+        raise ODBCError("_extract_fixed_value", []) from exc
 
 
 # ---------------------------------------------------------------------------

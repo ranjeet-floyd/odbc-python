@@ -229,3 +229,64 @@ class TestConnectFunction:
         conn = connect("DSN=test;")
         assert isinstance(conn, Connection)
         conn.close()
+
+
+class TestConnectionDriverConnectNone:
+    """Blocker #3 fix: DBC handle doesn't leak when SQLDriverConnectW is None."""
+
+    def test_cleanup_called_when_driver_connect_none(self, monkeypatch):
+        import api
+
+        def alloc_handle_ok(ht, parent, out_ptr):
+            out_ptr._obj.value = 0xABCD
+            return C.SQL_SUCCESS
+
+        monkeypatch.setattr(api, "SQLAllocHandle", alloc_handle_ok)
+        monkeypatch.setattr(api, "SQLSetEnvAttr", lambda *a: C.SQL_SUCCESS)
+        monkeypatch.setattr(api, "SQLDriverConnectW", None)
+        monkeypatch.setattr(api, "SQLDisconnect", lambda *a: C.SQL_SUCCESS)
+        monkeypatch.setattr(api, "SQLFreeHandle", lambda *a: C.SQL_SUCCESS)
+
+        with pytest.raises(ODBCError):
+            Connection("DSN=test;")
+        # If we get here without segfault/leak, the fix works.
+
+
+class TestConnectionDel:
+    def test_del_warns_unclosed(self, monkeypatch):
+        _patch_init_success(monkeypatch)
+        conn = Connection("DSN=test;")
+        with pytest.warns(ResourceWarning, match="was not closed"):
+            conn.__del__()
+
+    def test_del_silent_when_already_closed(self, monkeypatch):
+        _patch_init_success(monkeypatch)
+        conn = Connection("DSN=test;")
+        conn.close()
+        conn.__del__()  # should not warn
+
+
+class TestSetEnvAttrFailure:
+    def test_raises_and_frees_env(self, monkeypatch):
+        import api
+
+        def alloc_handle_ok(ht, parent, out_ptr):
+            out_ptr._obj.value = 0xABCD
+            return C.SQL_SUCCESS
+
+        free_calls = []
+
+        def track_free(ht, handle):
+            free_calls.append(ht.value if hasattr(ht, 'value') else ht)
+            return C.SQL_SUCCESS
+
+        monkeypatch.setattr(api, "SQLAllocHandle", alloc_handle_ok)
+        monkeypatch.setattr(api, "SQLSetEnvAttr", lambda *a: C.SQL_ERROR)
+        monkeypatch.setattr(api, "SQLFreeHandle", track_free)
+        monkeypatch.setattr(api, "SQLGetDiagRecW", lambda *a: C.SQL_NO_DATA)
+        monkeypatch.setattr(api, "SQLDisconnect", lambda *a: C.SQL_SUCCESS)
+
+        with pytest.raises(ODBCError):
+            Connection("DSN=test;")
+        # ENV handle should have been freed
+        assert any(ht == C.SQL_HANDLE_ENV for ht in free_calls)

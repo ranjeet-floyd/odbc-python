@@ -22,7 +22,7 @@ def _get_dbms_name(h_dbc: ctypes.c_void_p) -> str:
         h_dbc,
         api.SQLUSMALLINT(api.SQL_DBMS_NAME),
         ctypes.cast(buf, api.SQLPOINTER),
-        api.SQLSMALLINT(256),
+        api.SQLSMALLINT(ctypes.sizeof(buf)),
         ctypes.byref(out_len),
     )
     if is_error(ret):
@@ -65,6 +65,7 @@ class Connection:
 
         # 4) Connect.
         if api.SQLDriverConnectW is None:
+            self._cleanup()
             raise ODBCError("SQLDriverConnectW", [])
         out_conn = ctypes.create_unicode_buffer(1024)
         out_len = api.SQLSMALLINT()
@@ -158,6 +159,16 @@ class Connection:
             self._tx.rollback()
         self._cleanup()
 
+    def __del__(self) -> None:
+        if getattr(self, '_h_dbc', None) is None:
+            return
+        import warnings
+        warnings.warn(
+            f"Connection {id(self):#x} was not closed",
+            ResourceWarning,
+            stacklevel=2,
+        )
+        self._cleanup()
     def _cleanup(self) -> None:
         if self._h_dbc is not None:
             api.SQLDisconnect(self._h_dbc)

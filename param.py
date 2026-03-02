@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime, time as dt_time
 from typing import Any
 
 import api
@@ -131,7 +131,9 @@ def bind_value(
         size = 1
 
     elif isinstance(value, int):
-        if -0x80000000 < value < 0x7FFFFFFF:
+        # Go uses strict inequality; we use inclusive to correctly handle
+        # INT32_MIN (-2147483648) and INT32_MAX (2147483647).
+        if -0x80000000 <= value <= 0x7FFFFFFF:
             if param.is_described and param.sql_type in (api.SQL_BIGINT, api.SQL_INFX_BIGINT):
                 d = ctypes.c_int64(value)
                 param._pinned = d
@@ -181,6 +183,32 @@ def bind_value(
             if param.sql_type in (api.SQL_TYPE_TIMESTAMP, api.SQL_INFX_UDT_FIXED):
                 decimal = param.decimal or 3
         size = 20 + decimal
+
+    elif isinstance(value, date):
+        # date (not datetime — check order matters!) → SQL_TYPE_DATE
+        ds = api.SQL_DATE_STRUCT(
+            year=value.year,
+            month=value.month,
+            day=value.day,
+        )
+        param._pinned = ds
+        buf = ctypes.cast(ctypes.byref(ds), api.SQLPOINTER)
+        c_type = api.SQL_C_TYPE_DATE
+        sql_type = api.SQL_TYPE_DATE
+        size = 10  # yyyy-mm-dd
+
+    elif isinstance(value, dt_time):
+        # time → SQL_TYPE_TIME
+        ts = api.SQL_TIME_STRUCT(
+            hour=value.hour,
+            minute=value.minute,
+            second=value.second,
+        )
+        param._pinned = ts
+        buf = ctypes.cast(ctypes.byref(ts), api.SQLPOINTER)
+        c_type = api.SQL_C_TYPE_TIME
+        sql_type = api.SQL_TYPE_TIME
+        size = 8  # hh:mm:ss
 
     elif isinstance(value, bytes):
         b = (ctypes.c_char * len(value))(*value)

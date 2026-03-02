@@ -103,6 +103,21 @@ class TestNewError:
         finally:
             api.SQLGetDiagRecW = original
 
+
+class TestDiagRecFailure:
+    """When SQLGetDiagRecW itself returns an error code."""
+
+    def test_returns_fallback_error(self):
+        import api
+        original = api.SQLGetDiagRecW
+        try:
+            api.SQLGetDiagRecW = lambda *a: C.SQL_ERROR
+            err = new_error("TestAPI", ctypes.c_void_p(1), C.SQL_HANDLE_STMT)
+            assert isinstance(err, ODBCError)
+            assert "SQLGetDiagRec failed" in str(err)
+        finally:
+            api.SQLGetDiagRecW = original
+
     def test_bad_conn_states_return_bad_connection_error(self):
         """SQLSTATE 08S01 should produce BadConnectionError."""
         import api

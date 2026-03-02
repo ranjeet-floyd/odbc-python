@@ -43,7 +43,15 @@ class Cursor:
         """Execute a query, optionally with parameters (prepared stmt path)."""
         self._ensure_open()
 
-        if params:
+        # Reset previous results (mirrors Go SQLCloseCursor before re-use).
+        if self._columns:
+            if api.SQLCloseCursor is not None:
+                api.SQLCloseCursor(self._h_stmt)
+            self._columns = []
+            self.description = None
+            self.rowcount = -1
+
+        if params is not None:
             self._execute_prepared(query, params)
         else:
             self._execute_direct(query)
@@ -159,6 +167,17 @@ class Cursor:
             return
         self._closed = True
         release_handle(api.SQL_HANDLE_STMT, self._h_stmt)
+
+    def __del__(self) -> None:
+        if getattr(self, '_closed', True):
+            return
+        import warnings
+        warnings.warn(
+            f"Cursor {id(self):#x} was not closed",
+            ResourceWarning,
+            stacklevel=2,
+        )
+        self.close()
 
     def _ensure_open(self) -> None:
         if self._closed:
