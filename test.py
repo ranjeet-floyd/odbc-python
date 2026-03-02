@@ -1,58 +1,34 @@
-"""Smoke-test for odbc-python (requires INFORMIX_CONNECTION_STRING env var)."""
+"""Quick smoke-test launcher — delegates to pytest integration tests.
 
-import os
+Usage:
+    # Set your connection string:
+    export ODBC_TEST_DSN="DRIVER={...};SERVER=...;DATABASE=...;"
+    # OR for Informix:
+    export INFORMIX_TEST_DSN="DRIVER={IBM INFORMIX ODBC DRIVER};SERVER=...;"
+
+    # Run all integration tests:
+    python test.py
+
+    # Run only connection tests:
+    python test.py -k TestConnection
+
+    # Run Informix-specific tests:
+    python test.py -k TestInformix
+"""
+
+import subprocess
 import sys
-
-# Allow running from the repo root without installing.
-sys.path.insert(0, os.path.dirname(__file__))
-
-from connection import connect  # noqa: E402
 
 
 def main() -> None:
-    conn_str = os.environ.get("INFORMIX_CONNECTION_STRING")
-    if not conn_str:
-        print("Please set INFORMIX_CONNECTION_STRING environment variable.")
-        print(
-            "Example: DRIVER={IBM INFORMIX ODBC DRIVER};"
-            "SERVER=ol_informix1210;DATABASE=testdb;UID=informix;PWD=password;"
-        )
-        return
+    args = [
+        sys.executable, "-m", "pytest",
+        "tests/test_integration.py",
+        "-v", "--tb=short",
+    ] + sys.argv[1:]
 
-    try:
-        print(f"Connecting to {conn_str}...")
-        with connect(conn_str) as conn:
-            print(f"Connected! DBMS: {conn._dbms_name}")
-            print(f"Informix? {conn._is_informix}")
-            print(f"Ping: {conn.ping()}")
-
-            with conn.cursor() as cur:
-                query = "SELECT first 10 * FROM systables"
-                print(f"Executing: {query}")
-                cur.execute(query)
-
-                if cur.description:
-                    headers = [d[0] for d in cur.description]
-                    print(f"Columns: {headers}")
-
-                rows = cur.fetchall()
-                print(f"Got {len(rows)} rows:")
-                for row in rows:
-                    print(row)
-
-            # Transaction demo.
-            print("\n--- Transaction test ---")
-            with conn.begin() as tx:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT first 1 * FROM systables")
-                    print(f"In-tx row: {cur.fetchone()}")
-                # tx auto-commits on clean exit.
-
-        print("Connection closed.")
-
-    except Exception as e:
-        print(f"Error: {e}")
-        raise
+    print(f"Running: {' '.join(args)}")
+    sys.exit(subprocess.call(args))
 
 
 if __name__ == "__main__":
