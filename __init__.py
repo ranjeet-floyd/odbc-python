@@ -15,10 +15,10 @@ Usage:
     conn.close()
 """
 
-from .connection import Connection, connect
-from .cursor import Cursor
-from .error import ODBCError, DiagRecord, is_error
-from .transaction import Transaction
+from connection import Connection, connect
+from cursor import Cursor
+from error import ODBCError, DiagRecord, is_error
+from transaction import Transaction
 
 __all__ = [
     "connect",

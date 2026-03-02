@@ -12,8 +12,8 @@ from abc import ABC, abstractmethod
 from datetime import date, datetime, time
 from typing import Any
 
-from . import api
-from .error import ODBCError, is_error, new_error
+import api
+from error import ODBCError, is_error, new_error
 
 
 # ---------------------------------------------------------------------------

@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from . import api
-from .error import ODBCError, is_error, new_error
+import api
+from error import ODBCError, is_error, new_error
 
 
 @dataclass

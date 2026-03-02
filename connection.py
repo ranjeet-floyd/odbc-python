@@ -5,11 +5,11 @@ from __future__ import annotations
 import ctypes
 from typing import Any
 
-from . import api
-from .cursor import Cursor
-from .error import BadConnectionError, ODBCError, is_error, new_error
-from .handle import alloc_handle, release_handle
-from .transaction import Transaction
+import api
+from cursor import Cursor
+from error import BadConnectionError, ODBCError, is_error, new_error
+from handle import alloc_handle, release_handle
+from transaction import Transaction
 
 
 def _get_dbms_name(h_dbc: ctypes.c_void_p) -> str:

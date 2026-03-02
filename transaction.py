@@ -5,11 +5,11 @@ from __future__ import annotations
 import ctypes
 from typing import TYPE_CHECKING
 
-from . import api
-from .error import is_error, new_error
+import api
+from error import is_error, new_error
 
 if TYPE_CHECKING:
-    from .connection import Connection
+    from connection import Connection
 
 
 def _set_autocommit(h_dbc: ctypes.c_void_p, on: bool) -> None:

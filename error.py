@@ -5,7 +5,7 @@ from __future__ import annotations
 import ctypes
 from dataclasses import dataclass, field
 
-from . import api
+import api
 
 # SQLSTATE codes that indicate a dead connection (matches Go error.go).
 _BAD_CONN_STATES = frozenset({"08S01", "08001", "08007"})

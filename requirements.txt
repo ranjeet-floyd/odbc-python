@@ -1,0 +1,6 @@
+# Runtime: no external deps (stdlib ctypes only)
+
+# Development / Testing
+pytest>=8.0
+pytest-cov>=5.0
+pytest-mock>=3.14

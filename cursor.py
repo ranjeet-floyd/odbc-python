@@ -5,14 +5,14 @@ from __future__ import annotations
 import ctypes
 from typing import TYPE_CHECKING, Any, Sequence
 
-from . import api
-from .column import Column, new_column
-from .error import ODBCError, is_error, new_error
-from .handle import alloc_handle, release_handle
-from .param import Parameter, bind_value, extract_parameters
+import api
+from column import Column, new_column
+from error import ODBCError, is_error, new_error
+from handle import alloc_handle, release_handle
+from param import Parameter, bind_value, extract_parameters
 
 if TYPE_CHECKING:
-    from .connection import Connection
+    from connection import Connection
 
 
 class Cursor:

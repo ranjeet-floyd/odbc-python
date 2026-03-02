@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import ctypes
 
-from . import api
-from .error import ODBCError, is_error, new_error
+import api
+from error import ODBCError, is_error, new_error
 
 # Maps handle_type -> string for debug messages.
 _HANDLE_NAMES = {

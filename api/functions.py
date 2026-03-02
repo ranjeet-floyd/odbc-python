@@ -43,7 +43,12 @@ else:
         except OSError:
             pass
     if _lib is None:
-        raise ImportError("Could not load ODBC library (libodbc.so / libodbc.dylib)")
+        import warnings
+        warnings.warn(
+            "Could not load ODBC library (libodbc.so / libodbc.dylib). "
+            "All ODBC functions will be None — only useful for testing.",
+            stacklevel=2,
+        )
 
 
 def _fn(
@@ -53,7 +58,12 @@ def _fn(
     *,
     optional: bool = False,
 ):
-    """Bind a ctypes function from the ODBC library."""
+    """Bind a ctypes function from the ODBC library.
+
+    Returns None when the library is not loaded (test/dev environments).
+    """
+    if _lib is None:
+        return None
     try:
         func = getattr(_lib, name)
     except AttributeError:
